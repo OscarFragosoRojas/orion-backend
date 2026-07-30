@@ -1,0 +1,7 @@
+fastapi[standard]
+langchain
+langchain-community
+langchain-ollama
+pypdf
+faiss-cpu
+python-dotenv
