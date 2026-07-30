@@ -7,23 +7,21 @@ from typing import Optional
 
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_community.vectorstores import FAISS
 from langchain_ollama import OllamaEmbeddings
+from langchain_postgres import PGVector
 
-
-INDEX_DIR = Path(__file__).resolve().parents[1] / "storage" / "faiss_index"
-
+from .database import SQLALCHEMY_DATABASE_URL
 
 def build_vectorstore_from_base64(
     pdf_base64: str,
+    project_id: int,
+    document_id: int,
     *,
     embedding_model: str = "mxbai-embed-large",
-    save_to_disk: bool = True,
-) -> FAISS:
+    clear_previous: bool = False,
+) -> PGVector:
     """
-    Recibe un string en Base64 que representa un PDF, lo procesa y genera el vectorstore.
-
-    pdf_base64: Cadena en Base64 (puede o no incluir el prefijo data:application/pdf;base64,)
+    Recibe un string en Base64 que representa un PDF, lo procesa y genera el vectorstore en Postgres.
     """
     # 1. Limpiar el prefijo 'data:application/pdf;base64,' si el frontend lo envía
     if "," in pdf_base64:
@@ -40,7 +38,7 @@ def build_vectorstore_from_base64(
     # 3. Guardar en un archivo temporal para que PyPDFLoader pueda leerlo
     with tempfile.NamedTemporaryFile(suffix=".pdf", delete=True) as temp_file:
         temp_file.write(pdf_bytes)
-        temp_file.flush()  # Asegurar que todos los bytes se escriban en disco
+        temp_file.flush()
 
         # Cargar los documentos desde el archivo temporal
         loader = PyPDFLoader(temp_file.name)
@@ -54,25 +52,42 @@ def build_vectorstore_from_base64(
     )
     chunks = splitter.split_documents(docs)
 
-    # 5. Crear o actualizar el VectorStore
-    if save_to_disk and INDEX_DIR.exists() and (INDEX_DIR / "index.faiss").exists():
-        # Si ya existe, lo cargamos y añadimos los nuevos documentos
-        vectorstore = FAISS.load_local(str(INDEX_DIR), embeddings, allow_dangerous_deserialization=True)
-        vectorstore.add_documents(chunks)
-    else:
-        # Si no existe, creamos uno nuevo desde cero
-        vectorstore = FAISS.from_documents(chunks, embeddings)
+    # Inyectar project_id y document_id como metadata
+    for chunk in chunks:
+        chunk.metadata["project_id"] = project_id
+        chunk.metadata["document_id"] = document_id
 
-    # 6. Opcional: Persistir el índice si se requiere
-    if save_to_disk:
-        INDEX_DIR.mkdir(parents=True, exist_ok=True)
-        vectorstore.save_local(str(INDEX_DIR))
+    # 5. Conectar a PGVector
+    vectorstore = PGVector(
+        embeddings=embeddings,
+        collection_name="orion_docs",
+        connection=SQLALCHEMY_DATABASE_URL,
+        use_jsonb=True,
+    )
+
+    if clear_previous:
+        # Aquí idealmente borraríamos solo los del project_id, 
+        # pero la API de PGVector no soporta delete por metadata fácilmente desde aquí.
+        # Por simplicidad en este MVP, borramos la colección entera si piden clear_previous
+        vectorstore.drop_tables()
+        vectorstore = PGVector(
+            embeddings=embeddings,
+            collection_name="orion_docs",
+            connection=SQLALCHEMY_DATABASE_URL,
+            use_jsonb=True,
+        )
+
+    # Añadir los chunks a postgres
+    vectorstore.add_documents(chunks)
 
     return vectorstore
 
-def get_vectorstore(embedding_model: str = "mxbai-embed-large") -> Optional[FAISS]:
-    """Carga el vectorstore desde disco si existe."""
-    if INDEX_DIR.exists() and (INDEX_DIR / "index.faiss").exists():
-        embeddings = OllamaEmbeddings(model=embedding_model)
-        return FAISS.load_local(str(INDEX_DIR), embeddings, allow_dangerous_deserialization=True)
-    return None
+def get_vectorstore(embedding_model: str = "mxbai-embed-large") -> PGVector:
+    """Retorna la instancia del vectorstore de Postgres."""
+    embeddings = OllamaEmbeddings(model=embedding_model)
+    return PGVector(
+        embeddings=embeddings,
+        collection_name="orion_docs",
+        connection=SQLALCHEMY_DATABASE_URL,
+        use_jsonb=True,
+    )

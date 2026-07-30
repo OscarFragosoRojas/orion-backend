@@ -1,0 +1,16 @@
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: orion-postgres
+    environment:
+      POSTGRES_USER: orion
+      POSTGRES_PASSWORD: orionpassword
+      POSTGRES_DB: oriondb
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: always
+
+volumes:
+  postgres_data:
