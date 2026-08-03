@@ -8,3 +8,4 @@ psycopg2-binary
 SQLAlchemy
 pgvector
 langchain-postgres
+boto3

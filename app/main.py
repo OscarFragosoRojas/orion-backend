@@ -7,6 +7,7 @@ from . import models, schemas
 from .database import engine, get_db
 from .indexer import build_vectorstore_from_base64
 from .rag import RagService
+from .storage import upload_pdf_from_base64
 
 # Crear las tablas de BD
 models.Base.metadata.create_all(bind=engine)
@@ -55,37 +56,52 @@ async def ingest_pdf(payload: schemas.PDFPayload, db: Session = Depends(get_db))
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    # 2. Crear documento en BD (procesando)
-    db_doc = models.Document(project_id=payload.project_id, filename=payload.filename)
+    # 2. Subir PDF a Google Cloud Storage
+    try:
+        gcs_uri, public_url = upload_pdf_from_base64(
+            pdf_base64=payload.pdf_base64,
+            project_id=payload.project_id,
+            filename=payload.filename or "documento.pdf",
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al subir a GCS: {e}")
+
+    # 3. Crear documento en BD con la ruta de GCS
+    db_doc = models.Document(
+        project_id=payload.project_id,
+        filename=payload.filename,
+        file_path=gcs_uri,
+    )
     db.add(db_doc)
     db.commit()
     db.refresh(db_doc)
 
     try:
-        # 3. Construir vector store
+        # 4. Construir vector store
         vs = build_vectorstore_from_base64(
             pdf_base64=payload.pdf_base64,
             project_id=payload.project_id,
             document_id=db_doc.id,
             clear_previous=payload.clear_previous
         )
-        
-        # 4. Obtener resumen de este documento en específico
-        # Para esto, filtramos temporalmente por este document_id en el RagService (o project_id si cleared)
+
+        # 5. Obtener resumen del documento
         summary_answer, _ = rag_service.answer(
             "Por favor, haz un resumen general de los temas principales y puntos clave de este documento.",
             project_id=payload.project_id
         )
 
-        # 5. Guardar resumen
+        # 6. Guardar resumen
         db_doc.summary = summary_answer
         db.commit()
-        
+
         return {
             "status": "success",
             "message": "PDF procesado correctamente",
             "document_id": db_doc.id,
-            "summary": summary_answer
+            "summary": summary_answer,
+            "gcs_uri": gcs_uri,
+            "public_url": public_url,
         }
     except Exception as e:
         db.delete(db_doc)
@@ -99,3 +115,8 @@ async def ask_question(req: schemas.AskRequest):
         return schemas.AskResponse(answer=answer, sources=sources)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+
+# Ejecutar Entorno Virtual: source .venv/bin/activate
+# Ejecutar desde terminal: uvicorn main:app --reload
