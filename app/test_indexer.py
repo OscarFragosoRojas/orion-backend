@@ -1,3 +1,9 @@
+"""
+Prueba de recuperación de datos
+
+Prueba que venia en el repositorio original
+"""
+
 from app.indexer import get_vectorstore
 
 if __name__ == "__main__":

@@ -56,7 +56,7 @@ async def ingest_pdf(payload: schemas.PDFPayload, db: Session = Depends(get_db))
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    # 2. Subir PDF a Google Cloud Storage
+    # 2. Subir PDF a Cloudfare R2
     try:
         gcs_uri, public_url = upload_pdf_from_base64(
             pdf_base64=payload.pdf_base64,

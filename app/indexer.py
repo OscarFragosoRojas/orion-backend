@@ -23,11 +23,9 @@ def build_vectorstore_from_base64(
     """
     Recibe un string en Base64 que representa un PDF, lo procesa y genera el vectorstore en Postgres.
     """
-    # 1. Limpiar el prefijo 'data:application/pdf;base64,' si el frontend lo envía
     if "," in pdf_base64:
         pdf_base64 = pdf_base64.split(",")[1]
 
-    # 2. Decodificar la cadena Base64 a bytes de PDF
     try:
         pdf_bytes = base64.b64decode(pdf_base64)
     except Exception as e:
@@ -35,16 +33,13 @@ def build_vectorstore_from_base64(
 
     embeddings = OllamaEmbeddings(model=embedding_model)
 
-    # 3. Guardar en un archivo temporal para que PyPDFLoader pueda leerlo
     with tempfile.NamedTemporaryFile(suffix=".pdf", delete=True) as temp_file:
         temp_file.write(pdf_bytes)
         temp_file.flush()
 
-        # Cargar los documentos desde el archivo temporal
         loader = PyPDFLoader(temp_file.name)
         docs = loader.load()
 
-    # 4. Dividir en chunks
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=1000,
         chunk_overlap=150,
@@ -52,12 +47,9 @@ def build_vectorstore_from_base64(
     )
     chunks = splitter.split_documents(docs)
 
-    # Inyectar project_id y document_id como metadata
     for chunk in chunks:
         chunk.metadata["project_id"] = project_id
         chunk.metadata["document_id"] = document_id
-
-    # 5. Conectar a PGVector
     vectorstore = PGVector(
         embeddings=embeddings,
         collection_name="orion_docs",
@@ -65,10 +57,8 @@ def build_vectorstore_from_base64(
         use_jsonb=True,
     )
 
+
     if clear_previous:
-        # Aquí idealmente borraríamos solo los del project_id, 
-        # pero la API de PGVector no soporta delete por metadata fácilmente desde aquí.
-        # Por simplicidad en este MVP, borramos la colección entera si piden clear_previous
         vectorstore.drop_tables()
         vectorstore = PGVector(
             embeddings=embeddings,
@@ -83,7 +73,6 @@ def build_vectorstore_from_base64(
     return vectorstore
 
 def get_vectorstore(embedding_model: str = "mxbai-embed-large") -> PGVector:
-    """Retorna la instancia del vectorstore de Postgres."""
     embeddings = OllamaEmbeddings(model=embedding_model)
     return PGVector(
         embeddings=embeddings,
