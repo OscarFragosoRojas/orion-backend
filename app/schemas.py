@@ -2,16 +2,53 @@ from pydantic import BaseModel, Field
 from typing import List, Optional
 from datetime import datetime
 
+# ---------------------------------------------------------------------------
+# Team Members
+# ---------------------------------------------------------------------------
+
+class TeamMemberCreate(BaseModel):
+    name: str
+    role: str  # developer, pm, designer, qa, devops
+
+class TeamMemberResponse(BaseModel):
+    id: int
+    name: str
+    role: str
+
+    class Config:
+        from_attributes = True
+
+# ---------------------------------------------------------------------------
+# Projects
+# ---------------------------------------------------------------------------
+
 class ProjectCreate(BaseModel):
     name: str
+    client: str
+    description: str
+    project_type: str
+    start_date: datetime
+    end_date: datetime
+    team_members: List[TeamMemberCreate] = []
 
 class ProjectResponse(BaseModel):
     id: int
     name: str
+    client: str
+    description: str
+    project_type: str
+    start_date: datetime
+    end_date: datetime
+    progress: int  # 0-100
     created_at: datetime
+    team_members: List[TeamMemberResponse] = []
 
     class Config:
         from_attributes = True
+
+# ---------------------------------------------------------------------------
+# Documents
+# ---------------------------------------------------------------------------
 
 class DocumentResponse(BaseModel):
     id: int
@@ -22,6 +59,10 @@ class DocumentResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+# ---------------------------------------------------------------------------
+# RAG
+# ---------------------------------------------------------------------------
 
 class AskRequest(BaseModel):
     """
