@@ -151,7 +151,8 @@ async def ingest_pdf(payload: schemas.PDFPayload, db: Session = Depends(get_db))
         # 5. Obtener resumen del documento
         summary_answer, _ = rag_service.answer(
             "Por favor, haz un resumen general de los temas principales y puntos clave de este documento.",
-            project_id=payload.project_id
+            project_id=payload.project_id,
+            document_id=db_doc.id
         )
 
         # 6. Guardar resumen

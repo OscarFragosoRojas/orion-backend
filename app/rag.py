@@ -77,7 +77,12 @@ class RagService:
         self.relevance_threshold = relevance_threshold
         self.llm = ChatOllama(model=llm_model, temperature=0)
 
-    def answer(self, question: str, project_id: int = None) -> tuple[str, list[dict]]:
+    def answer(
+        self,
+        question: str,
+        project_id: int = None,
+        document_id: int = None,
+    ) -> tuple[str, list[dict]]:
         q = question.strip()
 
         if looks_like_prompt_injection(q):
@@ -89,10 +94,17 @@ class RagService:
         if not self.vectorstore:
             return "No hay documentos cargados todavía. Por favor, sube un documento primero.", []
 
-        # Configurar el retriever dinámicamente para filtrar por project_id si se provee
+        # Configurar el retriever dinámicamente para filtrar por project_id y/o document_id si se proveen
         search_kwargs = {"k": self.k, "score_threshold": self.relevance_threshold}
+        
+        filter_dict = {}
         if project_id is not None:
-            search_kwargs["filter"] = {"project_id": project_id}
+            filter_dict["project_id"] = project_id
+        if document_id is not None:
+            filter_dict["document_id"] = document_id
+
+        if filter_dict:
+            search_kwargs["filter"] = filter_dict
 
         retriever = self.vectorstore.as_retriever(
             search_type="similarity_score_threshold",
