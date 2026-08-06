@@ -13,8 +13,8 @@ from .models import DUMMY_TEAM_MEMBERS
 # ---------------------------------------------------------------------------
 # Recrear tablas y hacer seed de datos dummy
 # ---------------------------------------------------------------------------
-models.Base.metadata.drop_all(bind=engine)
-models.Base.metadata.create_all(bind=engine)
+# models.Base.metadata.drop_all(bind=engine)
+# models.Base.metadata.create_all(bind=engine)
 
 def seed_team_members(db: Session) -> None:
     """Inserta miembros dummy si la tabla está vacía."""
@@ -104,9 +104,24 @@ def create_project(project: schemas.ProjectCreate, db: Session = Depends(get_db)
     db.refresh(db_project)
     return db_project
 
+#Obtener todos los proyectos
 @app.get("/projects", response_model=List[schemas.ProjectResponse])
 def get_projects(db: Session = Depends(get_db)):
     return db.query(models.Project).all()
+
+#Obtener un proyecto por id
+@app.get("/projects/{project_id}", response_model=schemas.ProjectResponse)
+def get_project(project_id: int, db: Session = Depends(get_db)):
+    project = db.query(models.Project).filter(models.Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return project
+
+#Obtener los miembros del equipo de un proyecto
+@app.get("/projects/{project_id}/team-members", response_model=List[schemas.TeamMemberResponse])
+def get_project_team_members(project_id: int, db: Session = Depends(get_db)):
+    return db.query(models.TeamMember).filter(models.TeamMember.project_id == project_id).all()
+
 
 # ---------------------------------------------------------------------------
 # Documents / Ingest PDF
@@ -171,6 +186,14 @@ async def ingest_pdf(payload: schemas.PDFPayload, db: Session = Depends(get_db))
         db.delete(db_doc)
         db.commit()
         raise HTTPException(status_code=400, detail=str(e))
+
+#Obtener los documentos de un proyecto
+@app.get("/documents/{project_id}", response_model=List[schemas.DocumentResponse])
+def get_project_documents(project_id: int, db: Session = Depends(get_db)):
+    project = db.query(models.Project).filter(models.Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return project.documents
 
 # ---------------------------------------------------------------------------
 # RAG / Ask
