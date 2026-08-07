@@ -163,22 +163,22 @@ async def ingest_pdf(payload: schemas.PDFPayload, db: Session = Depends(get_db))
             clear_previous=payload.clear_previous
         )
 
-        # 5. Obtener resumen del documento
-        summary_answer, _ = rag_service.answer(
-            "Por favor, haz un resumen general de los temas principales y puntos clave de este documento.",
-            project_id=payload.project_id,
-            document_id=db_doc.id
-        )
+        # 5. Obtener resumen del documento (Desactivado a petición del usuario: guardar solo colección)
+        # summary_answer, _ = rag_service.answer(
+        #     "Por favor, haz un resumen general de los temas principales y puntos clave de este documento.",
+        #     project_id=payload.project_id,
+        #     document_id=db_doc.id
+        # )
 
-        # 6. Guardar resumen
-        db_doc.summary = summary_answer
-        db.commit()
+        # 6. Guardar resumen (Desactivado)
+        # db_doc.summary = summary_answer
+        # db.commit()
 
         return {
             "status": "success",
             "message": "PDF procesado correctamente",
             "document_id": db_doc.id,
-            "summary": summary_answer,
+            "summary": None,
             "gcs_uri": gcs_uri,
             "public_url": public_url,
         }
@@ -202,7 +202,11 @@ def get_project_documents(project_id: int, db: Session = Depends(get_db)):
 @app.post("/ask", response_model=schemas.AskResponse)
 async def ask_question(req: schemas.AskRequest):
     try:
-        answer, sources = rag_service.answer(req.question, project_id=req.project_id)
+        answer, sources = rag_service.answer(
+            req.question,
+            project_id=req.project_id,
+            document_id=req.document_id
+        )
         return schemas.AskResponse(answer=answer, sources=sources)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
